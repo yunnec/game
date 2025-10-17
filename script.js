@@ -12,6 +12,7 @@ let score = 0;
 let moves = 30;
 let selectedTile = null;
 let gameState = GAME_STATES.IDLE;
+let comboCount = 0;
 
 const gameBoard = document.getElementById('gameBoard');
 const scoreElement = document.getElementById('score');
@@ -29,6 +30,12 @@ function initializeGame() {
     moves = 30;
     selectedTile = null;
     gameState = GAME_STATES.IDLE;
+    comboCount = 0;
+    
+    const existingCombo = document.querySelector('.combo-indicator');
+    if (existingCombo) {
+        existingCombo.remove();
+    }
     
     updateScore();
     updateMoves();
@@ -221,17 +228,24 @@ function isAdjacent(row1, col1, row2, col2) {
 }
 
 function swapTiles(tile1, tile2) {
+    tile1.tile.classList.add('swapping');
+    tile2.tile.classList.add('swapping');
+    tile1.tile.setAttribute('data-sound', 'swap');
+    
     const tempColor = board[tile1.row][tile1.col];
     board[tile1.row][tile1.col] = board[tile2.row][tile2.col];
     board[tile2.row][tile2.col] = tempColor;
     
     tile1.tile.dataset.color = board[tile1.row][tile1.col];
-    tile1.tile.className = `tile tile-${board[tile1.row][tile1.col]}`;
+    tile1.tile.className = `tile tile-${board[tile1.row][tile1.col]} swapping`;
     
     tile2.tile.dataset.color = board[tile2.row][tile2.col];
-    tile2.tile.className = `tile tile-${board[tile2.row][tile2.col]}`;
+    tile2.tile.className = `tile tile-${board[tile2.row][tile2.col]} swapping`;
     
     setTimeout(() => {
+        tile1.tile.classList.remove('swapping');
+        tile2.tile.classList.remove('swapping');
+        
         const matches = findMatches();
         
         if (matches.length === 0) {
@@ -239,13 +253,12 @@ function swapTiles(tile1, tile2) {
             board[tile2.row][tile2.col] = tempColor;
             
             tile1.tile.dataset.color = board[tile1.row][tile1.col];
-            tile1.tile.className = `tile tile-${board[tile1.row][tile1.col]}`;
+            tile1.tile.className = `tile tile-${board[tile1.row][tile1.col]} invalid-swap`;
             
             tile2.tile.dataset.color = board[tile2.row][tile2.col];
-            tile2.tile.className = `tile tile-${board[tile2.row][tile2.col]}`;
+            tile2.tile.className = `tile tile-${board[tile2.row][tile2.col]} invalid-swap`;
             
-            tile1.tile.classList.add('invalid-swap');
-            tile2.tile.classList.add('invalid-swap');
+            tile1.tile.setAttribute('data-sound', 'invalid');
             
             setTimeout(() => {
                 tile1.tile.classList.remove('invalid-swap');
@@ -255,6 +268,7 @@ function swapTiles(tile1, tile2) {
         } else {
             moves--;
             updateMoves();
+            comboCount = 0;
             gameState = GAME_STATES.RESOLVING;
             processMatches();
         }
@@ -265,14 +279,28 @@ function processMatches() {
     const matches = findMatches();
     
     if (matches.length > 0) {
-        const matchScore = matches.length * 10;
+        comboCount++;
+        const comboMultiplier = comboCount;
+        const matchScore = matches.length * 10 * comboMultiplier;
         score += matchScore;
-        updateScore();
+        updateScore(matchScore);
+        
+        showComboIndicator(comboCount);
+        
+        if (matches.length > 0) {
+            const firstMatch = matches[0];
+            const tile = gameBoard.children[firstMatch.row * BOARD_SIZE + firstMatch.col];
+            if (tile) {
+                const rect = tile.getBoundingClientRect();
+                showScorePopup(matchScore, rect.left + rect.width / 2, rect.top);
+            }
+        }
         
         matches.forEach(match => {
             const tile = gameBoard.children[match.row * BOARD_SIZE + match.col];
             if (tile) {
                 tile.classList.add('matching');
+                tile.setAttribute('data-sound', 'match');
             }
         });
         
@@ -282,10 +310,11 @@ function processMatches() {
                 applyGravity();
                 setTimeout(() => {
                     processMatches();
-                }, 300);
-            }, 200);
+                }, 400);
+            }, 400);
         }, 500);
     } else {
+        comboCount = 0;
         gameState = GAME_STATES.IDLE;
         checkGameOver();
     }
@@ -353,8 +382,9 @@ function removeMatches(matches) {
         board[match.row][match.col] = null;
         const tile = gameBoard.children[match.row * BOARD_SIZE + match.col];
         if (tile) {
+            tile.classList.remove('matching');
             tile.classList.add('removed');
-            tile.style.opacity = '0';
+            tile.setAttribute('data-sound', 'remove');
         }
     });
 }
@@ -374,9 +404,9 @@ function applyGravity() {
                     
                     if (movingTile && targetTile) {
                         targetTile.dataset.color = movingTile.dataset.color;
-                        targetTile.className = `tile tile-${movingTile.dataset.color}`;
-                        targetTile.style.opacity = '1';
+                        targetTile.className = `tile tile-${movingTile.dataset.color} falling`;
                         targetTile.classList.remove('removed');
+                        targetTile.setAttribute('data-sound', 'fall');
                         
                         movingTile.dataset.color = '';
                         movingTile.className = 'tile';
@@ -394,12 +424,19 @@ function applyGravity() {
             const tile = gameBoard.children[row * BOARD_SIZE + col];
             if (tile) {
                 tile.dataset.color = color;
-                tile.className = `tile tile-${color}`;
-                tile.style.opacity = '1';
+                tile.className = `tile tile-${color} new-tile`;
                 tile.classList.remove('removed');
+                tile.setAttribute('data-sound', 'new');
             }
         }
     }
+    
+    setTimeout(() => {
+        const allTiles = gameBoard.querySelectorAll('.tile');
+        allTiles.forEach(tile => {
+            tile.classList.remove('falling', 'new-tile');
+        });
+    }, 500);
 }
 
 function checkGameOver() {
@@ -410,8 +447,51 @@ function checkGameOver() {
     }
 }
 
-function updateScore() {
+function updateScore(points = 0) {
     scoreElement.textContent = score;
+    
+    if (points > 0) {
+        scoreElement.classList.add('score-bump');
+        setTimeout(() => {
+            scoreElement.classList.remove('score-bump');
+        }, 400);
+    }
+}
+
+function showScorePopup(points, x, y) {
+    const popup = document.createElement('div');
+    popup.className = 'score-popup';
+    popup.textContent = `+${points}`;
+    popup.style.left = `${x}px`;
+    popup.style.top = `${y}px`;
+    popup.setAttribute('data-sound', 'score');
+    
+    document.body.appendChild(popup);
+    
+    setTimeout(() => {
+        popup.remove();
+    }, 1000);
+}
+
+function showComboIndicator(combo) {
+    const existing = document.querySelector('.combo-indicator');
+    if (existing) {
+        existing.remove();
+    }
+    
+    if (combo > 1) {
+        const indicator = document.createElement('div');
+        indicator.className = 'combo-indicator';
+        indicator.textContent = `COMBO x${combo}!`;
+        indicator.setAttribute('data-sound', 'combo');
+        
+        const container = document.querySelector('.game-board-container');
+        container.appendChild(indicator);
+        
+        setTimeout(() => {
+            indicator.remove();
+        }, 2000);
+    }
 }
 
 function updateMoves() {
