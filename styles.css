@@ -157,6 +157,15 @@ main {
     animation: pulse 0.5s ease-in-out;
 }
 
+.tile.invalid-swap {
+    animation: shake 0.3s ease-in-out;
+}
+
+.tile.removed {
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    transform: scale(0);
+}
+
 /* Tile color classes */
 .tile-red {
     background: linear-gradient(135deg, var(--color-tile-red) 0%, #c0392b 100%);
@@ -244,6 +253,18 @@ footer {
     }
     50% {
         transform: scale(1.15);
+    }
+}
+
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-5px);
+    }
+    75% {
+        transform: translateX(5px);
     }
 }
 
